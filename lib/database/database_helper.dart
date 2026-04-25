@@ -21,12 +21,11 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'garfadas_log.db');
     return await openDatabase(
       path,
-      version: 4,
+      version: 1,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
     );
   }
 
@@ -55,21 +54,6 @@ class DatabaseHelper {
         FOREIGN KEY (restauranteId) REFERENCES restaurantes (id) ON DELETE CASCADE
       )
     ''');
-  }
-
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('DROP TABLE IF EXISTS refeicoes');
-      await db.execute('DROP TABLE IF EXISTS pratos');
-      await db.execute('DROP TABLE IF EXISTS restaurantes');
-      await _onCreate(db, newVersion);
-    } 
-    if (oldVersion < 3) {
-      await db.execute('ALTER TABLE pratos ADD COLUMN imagePath TEXT');
-    }
-    if (oldVersion < 4) {
-      await db.execute('ALTER TABLE restaurantes ADD COLUMN overrideVoltaria INTEGER');
-    }
   }
 
   // --- MÉTODOS PARA RESTAURANTES ---
