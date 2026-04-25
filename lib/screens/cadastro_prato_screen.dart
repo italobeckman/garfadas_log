@@ -1,7 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
 import '../models/prato.dart';
-import '../database/database_helper.dart';
+import '../widgets/custom_input.dart';
+import '../widgets/rating_slider.dart';
+import '../widgets/primary_button.dart';
+import '../widgets/app_colors.dart';
+import '../widgets/app_layout.dart';
+import '../widgets/app_text.dart';
 
 class CadastroPratoScreen extends StatefulWidget {
   final int restauranteId;
@@ -22,6 +33,9 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
   double _notaCustoBeneficio = 3.0;
   bool _voltaria = true;
   bool _manualOverrideVoltaria = false;
+  
+  File? _image;
+  final _picker = ImagePicker();
 
   void _atualizarVoltaria() {
     if (!_manualOverrideVoltaria) {
@@ -32,8 +46,29 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
     }
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+    if (pickedFile != null) {
+      setState(() {
+        _image = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<String?> _saveImageLocally(File image) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
+    final savedImage = await image.copy(p.join(directory.path, fileName));
+    return savedImage.path;
+  }
+
   Future<void> _salvarPrato() async {
     if (_formKey.currentState!.validate()) {
+      String? imagePath;
+      if (_image != null) {
+        imagePath = await _saveImageLocally(_image!);
+      }
+
       final prato = Prato(
         restauranteId: widget.restauranteId,
         descricaoPrato: _descricaoPratoController.text.trim(),
@@ -44,25 +79,27 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
         observacoes: _observacoesController.text.trim().isNotEmpty
             ? _observacoesController.text.trim()
             : null,
+        imagePath: imagePath,
       );
 
-      await DatabaseHelper().insertPrato(prato);
+      final provider = context.read<AppProvider>();
+      await provider.addPrato(prato);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Avaliação salva com sucesso!'),
-            backgroundColor: Colors.green,
+            content: AppText('Avaliação salva com sucesso!', color: Colors.white),
+            backgroundColor: AppColors.success,
             duration: Duration(seconds: 2),
           ),
         );
-        Navigator.pop(context, true);
+        Navigator.pop(context);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Preencha os campos obrigatórios.'),
-          backgroundColor: Colors.red,
+          content: AppText('Preencha os campos obrigatórios.', color: Colors.white),
+          backgroundColor: AppColors.danger,
           duration: Duration(seconds: 2),
         ),
       );
@@ -81,11 +118,11 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
     double mediaAtual = (_notaComida * 0.6) + (_notaCustoBeneficio * 0.4);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Nova Avaliação de Prato'),
+        title: AppText.subtitle('Nova Avaliação'),
         elevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -94,25 +131,18 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
+              _buildImagePicker(),
+              const SizedBox(height: 24),
+              CustomInput(
                 controller: _descricaoPratoController,
-                decoration: const InputDecoration(
-                  labelText: 'Descrição do Prato (Ex: Bife Acebolado)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.fastfood),
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Informe o prato' : null,
+                label: 'Descrição do Prato (Ex: Bife Acebolado)',
+                icon: Icons.fastfood,
+                validator: (value) => value == null || value.isEmpty ? 'Informe o prato' : null,
               ),
               const SizedBox(height: 24),
-              const Text('Avaliação da Comida (Peso 60%)',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Slider(
+              RatingSlider(
+                label: 'Avaliação da Comida (Peso 60%)',
                 value: _notaComida,
-                min: 1.0,
-                max: 5.0,
-                divisions: 8,
-                label: _notaComida.toStringAsFixed(1),
                 activeColor: Colors.orange,
                 onChanged: (val) {
                   setState(() {
@@ -122,14 +152,9 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              const Text('Custo-Benefício (Peso 40%)',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Slider(
+              RatingSlider(
+                label: 'Custo-Benefício (Peso 40%)',
                 value: _notaCustoBeneficio,
-                min: 1.0,
-                max: 5.0,
-                divisions: 8,
-                label: _notaCustoBeneficio.toStringAsFixed(1),
                 activeColor: Colors.green,
                 onChanged: (val) {
                   setState(() {
@@ -139,30 +164,13 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
                 },
               ),
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Média Calculada:', style: TextStyle(fontSize: 16)),
-                    Text(
-                      mediaAtual.toStringAsFixed(2),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue),
-                    ),
-                  ],
-                ),
-              ),
+              _buildMediaDisplay(mediaAtual),
               const SizedBox(height: 24),
               SwitchListTile(
-                title: const Text('Comer de novo? (Voltaria)', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Calculadora automática. Desative para mudar manualmente.'),
+                title: const AppText('Comer de novo?', bold: true),
+                subtitle: const AppText('Cálculo automático baseado na nota.', type: AppTextType.caption),
                 value: _voltaria,
-                activeColor: Colors.green,
+                activeThumbColor: AppColors.success,
                 onChanged: (val) {
                   setState(() {
                     _voltaria = val;
@@ -171,31 +179,116 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
+              CustomInput(
                 controller: _observacoesController,
+                label: 'Observações Adicionais (Opcional)',
+                icon: Icons.notes,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Observações Adicionais (Opcional)',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
               ),
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
+                child: PrimaryButton(
+                  label: 'Salvar Avaliação',
+                  icon: Icons.save,
                   onPressed: _salvarPrato,
-                  icon: const Icon(Icons.save),
-                  label: const Text('Salvar Avaliação', style: TextStyle(fontSize: 16)),
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImagePicker() {
+    return Center(
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () => _showImageSourceActionSheet(),
+            child: Container(
+              width: double.infinity,
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: AppLayout.borderLarge,
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: _image != null
+                  ? ClipRRect(
+                      borderRadius: AppLayout.borderLarge,
+                      child: Image.file(_image!, fit: BoxFit.cover),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_a_photo, size: 50, color: Colors.grey.shade400),
+                        const SizedBox(height: 8),
+                        AppText('Adicionar Foto do Prato', color: Colors.grey.shade600),
+                      ],
+                    ),
+            ),
+          ),
+          if (_image != null)
+            TextButton.icon(
+              onPressed: () => setState(() => _image = null),
+              icon: const Icon(Icons.delete, color: AppColors.danger, size: 18),
+              label: const AppText('Remover Foto', color: AppColors.danger, type: AppTextType.detail),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showImageSourceActionSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const AppText('Câmera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const AppText('Galeria'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaDisplay(double mediaAtual) {
+    return Container(
+      padding: AppLayout.paddingM,
+      decoration: BoxDecoration(
+        color: AppColors.infoLight,
+        borderRadius: AppLayout.borderMedium,
+        border: Border.all(color: AppColors.info.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const AppText('Média Calculada:', type: AppTextType.body),
+          AppText.title(
+            mediaAtual.toStringAsFixed(2),
+            color: AppColors.info,
+          ),
+        ],
       ),
     );
   }

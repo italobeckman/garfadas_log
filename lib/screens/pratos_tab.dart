@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
 import '../models/prato.dart';
 import '../models/restaurante.dart';
-import '../database/database_helper.dart';
+import '../widgets/prato_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/app_colors.dart';
+import '../widgets/app_layout.dart';
+import '../widgets/app_text.dart';
 import 'cadastro_prato_screen.dart';
+import 'prato_detail_screen.dart';
 
 class PratosTab extends StatefulWidget {
   const PratosTab({super.key});
@@ -12,55 +19,31 @@ class PratosTab extends StatefulWidget {
 }
 
 class _PratosTabState extends State<PratosTab> {
-  late Future<List<Prato>> _pratosFuture;
   bool _sortDesc = true; 
 
   // Estado para Seleção Múltipla
   bool _isSelectionMode = false;
-  Set<int> _selectedPratos = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPratos();
-  }
-
-  void _loadPratos() {
-    setState(() {
-      _pratosFuture = DatabaseHelper().getAllPratosComRestaurante().then((pratos) {
-        if (_sortDesc) {
-          pratos.sort((a, b) => b.mediaAvaliacao.compareTo(a.mediaAvaliacao));
-        } else {
-          pratos.sort((a, b) => a.mediaAvaliacao.compareTo(b.mediaAvaliacao));
-        }
-        return pratos;
-      });
-    });
-  }
+  final Set<int> _selectedPratos = {};
 
   Future<void> _deleteSelectedPratos() async {
     if (_selectedPratos.isEmpty) return;
     
-    // Deleta do BD
-    for (int id in _selectedPratos) {
-      await DatabaseHelper().deletePrato(id);
-    }
-    
     final int contagem = _selectedPratos.length;
+    final provider = context.read<AppProvider>();
+    
+    await provider.deleteMultiplePratos(_selectedPratos);
     
     setState(() {
       _isSelectionMode = false;
       _selectedPratos.clear();
     });
     
-    _loadPratos();
-
     if (mounted) {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$contagem avaliação(ões) excluída(s).'),
-          backgroundColor: Colors.red.shade800,
+          content: AppText('$contagem avaliação(ões) excluída(s).', color: Colors.white),
+          backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -81,14 +64,17 @@ class _PratosTabState extends State<PratosTab> {
   }
 
   Future<void> _novoPratoGlobal() async {
-    if (_isSelectionMode) return; // Bloqueia criar se estiver apagando
+    if (_isSelectionMode) return;
 
-    final restaurantes = await DatabaseHelper().getAllRestaurantes();
-    if (!mounted) return;
+    final provider = context.read<AppProvider>();
+    final restaurantes = provider.restaurantes;
 
     if (restaurantes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cadastre um restaurante primeiro!'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: AppText('Cadastre um restaurante primeiro!', color: Colors.white), 
+          backgroundColor: AppColors.warning
+        ),
       );
       return;
     }
@@ -97,7 +83,8 @@ class _PratosTabState extends State<PratosTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Escolha o Restaurante'),
+          title: AppText.subtitle('Escolha o Restaurante'),
+          shape: RoundedRectangleBorder(borderRadius: AppLayout.borderMedium),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -106,8 +93,8 @@ class _PratosTabState extends State<PratosTab> {
               itemBuilder: (context, index) {
                 final rest = restaurantes[index];
                 return ListTile(
-                  leading: const Icon(Icons.store),
-                  title: Text(rest.nome),
+                  leading: const Icon(Icons.store, color: AppColors.primary),
+                  title: AppText.body(rest.nome),
                   onTap: () => Navigator.pop(context, rest),
                 );
               },
@@ -116,7 +103,7 @@ class _PratosTabState extends State<PratosTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
+              child: const AppText('Cancelar', color: AppColors.textSecondary),
             ),
           ],
         );
@@ -124,32 +111,29 @@ class _PratosTabState extends State<PratosTab> {
     );
 
     if (selectedRestaurante != null && mounted) {
-      final result = await Navigator.push(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => CadastroPratoScreen(restauranteId: selectedRestaurante.id!),
         ),
       );
-      if (result == true) {
-        _loadPratos();
-      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(
+        title: AppText.subtitle(
           _isSelectionMode ? '${_selectedPratos.length} Selecionados' : 'Todas as Refeições', 
-          style: const TextStyle(fontWeight: FontWeight.bold)
+          color: _isSelectionMode ? AppColors.danger : AppColors.primary,
         ),
-        backgroundColor: _isSelectionMode ? Colors.red.shade100 : Colors.transparent,
-        foregroundColor: _isSelectionMode ? Colors.red.shade900 : Theme.of(context).colorScheme.primary,
+        backgroundColor: _isSelectionMode ? AppColors.dangerLight : Colors.transparent,
+        centerTitle: true,
         leading: _isSelectionMode
             ? IconButton(
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close, color: AppColors.danger),
                 onPressed: () {
                   setState(() {
                     _isSelectionMode = false;
@@ -161,156 +145,87 @@ class _PratosTabState extends State<PratosTab> {
         actions: _isSelectionMode
             ? [
                 IconButton(
-                  icon: const Icon(Icons.delete),
+                  icon: const Icon(Icons.delete, color: AppColors.danger),
                   onPressed: _deleteSelectedPratos,
                   tooltip: 'Apagar seleção',
                 )
               ]
             : [
                 IconButton(
-                  icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
+                  icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward, color: AppColors.primary),
                   tooltip: _sortDesc ? 'Maior para Menor' : 'Menor para Maior',
                   onPressed: () {
                     setState(() {
                       _sortDesc = !_sortDesc;
-                      _loadPratos();
                     });
                   },
                 )
               ],
       ),
-      body: FutureBuilder<List<Prato>>(
-        future: _pratosFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return const Center(child: Text('Erro ao carregar as refeições.'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
+      body: Consumer<AppProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading && provider.pratos.isEmpty) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }
 
-          final pratos = snapshot.data!;
+          List<Prato> pratos = List.from(provider.pratos);
+          if (_sortDesc) {
+            pratos.sort((a, b) => b.mediaAvaliacao.compareTo(a.mediaAvaliacao));
+          } else {
+            pratos.sort((a, b) => a.mediaAvaliacao.compareTo(b.mediaAvaliacao));
+          }
+
+          if (pratos.isEmpty) {
+            return const EmptyState(
+              message: 'Nenhuma refeição registrada.',
+              icon: Icons.fastfood_outlined,
+            );
+          }
+
           return ListView.builder(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 80, top: 10),
             itemCount: pratos.length,
             itemBuilder: (context, index) {
               final prato = pratos[index];
-              return _buildPratoCard(prato);
+              return PratoCard(
+                prato: prato,
+                isSelected: _selectedPratos.contains(prato.id),
+                isSelectionMode: _isSelectionMode,
+                onTap: () {
+                  if (_isSelectionMode) {
+                    _toggleSelection(prato.id!);
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PratoDetailScreen(prato: prato),
+                      ),
+                    );
+                  }
+                },
+                onLongPress: () {
+                  setState(() {
+                    _isSelectionMode = true;
+                    _selectedPratos.add(prato.id!);
+                  });
+                },
+                onCheckboxChanged: (val) {
+                  _toggleSelection(prato.id!);
+                },
+              );
             },
           );
         },
       ),
       floatingActionButton: _isSelectionMode
-          ? null // Oculta botão de mais se tiver apagando
+          ? null 
           : FloatingActionButton.extended(
               onPressed: _novoPratoGlobal,
-              icon: const Icon(Icons.add),
-              label: const Text('Novo Prato'),
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const AppText('Novo Prato', type: AppTextType.button, color: Colors.white),
             ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.fastfood, size: 100, color: Colors.grey.shade300),
-          const SizedBox(height: 20),
-          Text(
-            'Nenhuma refeição registrada.',
-            style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPratoCard(Prato prato) {
-    final bool isSelected = _selectedPratos.contains(prato.id);
-    
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: isSelected ? 4 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15), 
-        side: isSelected ? BorderSide(color: Colors.red.shade400, width: 2) : BorderSide.none
-      ),
-      color: isSelected ? Colors.red.shade50 : Colors.white,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(15),
-        onLongPress: () {
-          setState(() {
-            _isSelectionMode = true;
-            _selectedPratos.add(prato.id!);
-          });
-        },
-        onTap: () {
-          if (_isSelectionMode) {
-            _toggleSelection(prato.id!);
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              if (_isSelectionMode)
-                Checkbox(
-                  value: isSelected,
-                  activeColor: Colors.red.shade600,
-                  onChanged: (val) {
-                    _toggleSelection(prato.id!);
-                  },
-                ),
-              Expanded(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  title: Text(prato.descricaoPrato, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.storefront, size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 4),
-                          Text(prato.nomeLocal ?? 'Desconhecido', style: TextStyle(color: Colors.grey.shade700)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 4),
-                          Text(prato.data, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Icon(prato.voltaria ? Icons.thumb_up : Icons.thumb_down, 
-                           color: prato.voltaria ? Colors.green : Colors.red, size: 20),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          Text(prato.mediaAvaliacao.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

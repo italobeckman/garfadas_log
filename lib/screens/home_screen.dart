@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_colors.dart';
 import 'restaurantes_tab.dart';
 import 'pratos_tab.dart';
 
@@ -20,9 +21,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _tabs[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _tabs,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textLight,
+        backgroundColor: AppColors.surface,
         onTap: (index) {
           setState(() {
             _currentIndex = index;
