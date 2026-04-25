@@ -8,6 +8,7 @@ class Prato {
   double notaCustoBeneficio; // 1.0 a 5.0
   bool voltaria;           
   String? observacoes;
+  String? imagePath;
 
   Prato({
     this.id,
@@ -19,6 +20,7 @@ class Prato {
     required this.notaCustoBeneficio,
     required this.voltaria,
     this.observacoes,
+    this.imagePath,
   });
 
   double get mediaAvaliacao =>
@@ -34,6 +36,7 @@ class Prato {
       'notaCustoBeneficio': notaCustoBeneficio,
       'voltaria': voltaria ? 1 : 0,
       'observacoes': observacoes,
+      'imagePath': imagePath,
     };
   }
 
@@ -48,6 +51,7 @@ class Prato {
       notaCustoBeneficio: map['notaCustoBeneficio'],
       voltaria: map['voltaria'] == 1,
       observacoes: map['observacoes'],
+      imagePath: map['imagePath'],
     );
   }
 }

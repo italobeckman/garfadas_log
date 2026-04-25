@@ -21,7 +21,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'garfadas_log.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -36,7 +36,8 @@ class DatabaseHelper {
       CREATE TABLE restaurantes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
-        tipo TEXT NOT NULL
+        tipo TEXT NOT NULL,
+        overrideVoltaria INTEGER
       )
     ''');
 
@@ -50,6 +51,7 @@ class DatabaseHelper {
         notaCustoBeneficio REAL NOT NULL,
         voltaria INTEGER NOT NULL,
         observacoes TEXT,
+        imagePath TEXT,
         FOREIGN KEY (restauranteId) REFERENCES restaurantes (id) ON DELETE CASCADE
       )
     ''');
@@ -61,6 +63,12 @@ class DatabaseHelper {
       await db.execute('DROP TABLE IF EXISTS pratos');
       await db.execute('DROP TABLE IF EXISTS restaurantes');
       await _onCreate(db, newVersion);
+    } 
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE pratos ADD COLUMN imagePath TEXT');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE restaurantes ADD COLUMN overrideVoltaria INTEGER');
     }
   }
 
@@ -109,11 +117,30 @@ class DatabaseHelper {
     if (result.isNotEmpty && result.first['totalPratos'] != 0) {
       rest.totalPratos = result.first['totalPratos'] as int;
       rest.notaGeral = result.first['mediaGeral'] as double;
-      rest.voltaria = rest.notaGeral! >= 3.5;
+      
+      // Busca o nome do último prato
+      var lastPlateResult = await db.query(
+        'pratos',
+        columns: ['descricaoPrato'],
+        where: 'restauranteId = ?',
+        whereArgs: [rest.id],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (lastPlateResult.isNotEmpty) {
+        rest.ultimoPrato = lastPlateResult.first['descricaoPrato'] as String;
+      }
+
+      if (rest.overrideVoltaria != null) {
+        rest.voltaria = rest.overrideVoltaria;
+      } else {
+        rest.voltaria = rest.notaGeral! >= 3.5;
+      }
     } else {
       rest.totalPratos = 0;
       rest.notaGeral = null;
-      rest.voltaria = null;
+      rest.voltaria = rest.overrideVoltaria;
+      rest.ultimoPrato = null;
     }
   }
 
