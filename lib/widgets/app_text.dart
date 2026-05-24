@@ -30,17 +30,17 @@ class AppText extends StatelessWidget {
     this.overflow,
   });
 
-  factory AppText.title(String text, {Color? color, TextAlign? textAlign, int? maxLines, TextOverflow? overflow}) => 
-    AppText(text, type: AppTextType.title, color: color, bold: true, textAlign: textAlign, maxLines: maxLines, overflow: overflow);
+  const AppText.title(this.text, {super.key, this.color, this.textAlign, this.maxLines, this.overflow}) : 
+    type = AppTextType.title, bold = true;
     
-  factory AppText.subtitle(String text, {Color? color, TextAlign? textAlign, int? maxLines, TextOverflow? overflow}) => 
-    AppText(text, type: AppTextType.subtitle, color: color, bold: true, textAlign: textAlign, maxLines: maxLines, overflow: overflow);
+  const AppText.subtitle(this.text, {super.key, this.color, this.textAlign, this.maxLines, this.overflow}) : 
+    type = AppTextType.subtitle, bold = true;
     
-  factory AppText.body(String text, {Color? color, bool bold = false, TextAlign? textAlign, int? maxLines, TextOverflow? overflow}) => 
-    AppText(text, type: AppTextType.body, color: color, bold: bold, textAlign: textAlign, maxLines: maxLines, overflow: overflow);
+  const AppText.body(this.text, {super.key, this.color, this.bold = false, this.textAlign, this.maxLines, this.overflow}) : 
+    type = AppTextType.body;
 
-  factory AppText.detail(String text, {Color? color, TextAlign? textAlign, int? maxLines, TextOverflow? overflow}) => 
-    AppText(text, type: AppTextType.detail, color: color, textAlign: textAlign, maxLines: maxLines, overflow: overflow);
+  const AppText.detail(this.text, {super.key, this.color, this.bold = false, this.textAlign, this.maxLines, this.overflow}) : 
+    type = AppTextType.detail;
 
   @override
   Widget build(BuildContext context) {

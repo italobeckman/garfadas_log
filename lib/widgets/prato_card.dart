@@ -52,12 +52,7 @@ class PratoCard extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 8.0, top: 8.0, bottom: 8.0),
                   child: ClipRRect(
                     borderRadius: AppLayout.borderSmall,
-                    child: Image.file(
-                      File(prato.imagePath!),
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                    ),
+                    child: _buildImage(prato.imagePath!),
                   ),
                 ),
               Expanded(
@@ -123,6 +118,38 @@ class PratoCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildImage(String path) {
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return _buildPlaceholder();
+        },
+      );
+    }
+    return Image.file(
+      File(path),
+      width: 60,
+      height: 60,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      width: 60,
+      height: 60,
+      color: Colors.grey.shade200,
+      child: const Icon(Icons.broken_image, size: 20, color: Colors.grey),
     );
   }
 }

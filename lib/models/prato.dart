@@ -34,7 +34,7 @@ class Prato {
       'data': data,
       'notaComida': notaComida,
       'notaCustoBeneficio': notaCustoBeneficio,
-      'voltaria': voltaria ? 1 : 0,
+      'voltaria': voltaria,
       'observacoes': observacoes,
       'imagePath': imagePath,
     };
@@ -44,12 +44,12 @@ class Prato {
     return Prato(
       id: map['id'],
       restauranteId: map['restauranteId'],
-      nomeLocal: map['nomeLocal'],
+      nomeLocal: map['nomeLocal'] ?? (map['restaurantes'] != null ? map['restaurantes']['nome'] : null),
       descricaoPrato: map['descricaoPrato'],
       data: map['data'],
-      notaComida: map['notaComida'],
-      notaCustoBeneficio: map['notaCustoBeneficio'],
-      voltaria: map['voltaria'] == 1,
+      notaComida: (map['notaComida'] as num).toDouble(),
+      notaCustoBeneficio: (map['notaCustoBeneficio'] as num).toDouble(),
+      voltaria: map['voltaria'] is bool ? map['voltaria'] : map['voltaria'] == 1,
       observacoes: map['observacoes'],
       imagePath: map['imagePath'],
     );

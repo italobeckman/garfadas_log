@@ -86,10 +86,7 @@ class PratoDetailScreen extends StatelessWidget {
         background: prato.imagePath != null
             ? Hero(
                 tag: 'prato_${prato.id}',
-                child: Image.file(
-                  File(prato.imagePath!),
-                  fit: BoxFit.cover,
-                ),
+                child: _buildImage(prato.imagePath!),
               )
             : Container(
                 decoration: const BoxDecoration(
@@ -258,6 +255,38 @@ class PratoDetailScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: AppLayout.borderMedium),
         ),
       ),
+    );
+  }
+
+  Widget _buildImage(String path) {
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Center(child: CircularProgressIndicator(color: Colors.white));
+        },
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+      );
+    }
+    return Image.file(
+      File(path),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppColors.primary, AppColors.primaryDark],
+        ),
+      ),
+      child: const Icon(Icons.broken_image, size: 80, color: Colors.white24),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/restaurante.dart';
 import '../models/prato.dart';
 import '../database/database_helper.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseHelper _dbHelper = DatabaseHelper();
@@ -9,59 +10,118 @@ class AppProvider extends ChangeNotifier {
   List<Restaurante> _restaurantes = [];
   List<Prato> _pratos = [];
   bool _isLoading = false;
+  String? _errorMessage;
+
+  AppProvider() {
+    _initAuthListener();
+  }
+
+  void _initAuthListener() {
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed) {
+        loadAllData();
+      } else if (event == AuthChangeEvent.signedOut) {
+        _restaurantes = [];
+        _pratos = [];
+        notifyListeners();
+      }
+    });
+  }
 
   List<Restaurante> get restaurantes => _restaurantes;
   List<Prato> get pratos => _pratos;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
 
   Future<void> loadAllData() async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
-    await Future.wait([
-      loadRestaurantes(),
-      loadPratos(),
-    ]);
-
-    _isLoading = false;
-    notifyListeners();
+    try {
+      await Future.wait([
+        loadRestaurantes(),
+        loadPratos(),
+      ]);
+    } catch (e) {
+      _errorMessage = "Erro ao carregar dados: ${e.toString()}";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadRestaurantes() async {
-    _restaurantes = await _dbHelper.getAllRestaurantes();
-    notifyListeners();
+    try {
+      _restaurantes = await _dbHelper.getAllRestaurantes();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = "Erro ao carregar restaurantes";
+      notifyListeners();
+    }
   }
 
   Future<void> loadPratos() async {
-    _pratos = await _dbHelper.getAllPratosComRestaurante();
-    notifyListeners();
+    try {
+      _pratos = await _dbHelper.getAllPratosComRestaurante();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = "Erro ao carregar pratos";
+      notifyListeners();
+    }
   }
 
   // CRUD Restaurante
   Future<void> addRestaurante(Restaurante restaurante) async {
-    await _dbHelper.insertRestaurante(restaurante);
-    await loadRestaurantes();
+    try {
+      await _dbHelper.insertRestaurante(restaurante);
+      await loadRestaurantes();
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   Future<void> updateRestaurante(Restaurante restaurante) async {
-    await _dbHelper.updateRestaurante(restaurante);
-    await loadAllData(); // Refresh everything in case override changed
+    try {
+      await _dbHelper.updateRestaurante(restaurante);
+      await loadAllData(); 
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   Future<void> deleteRestaurante(int id) async {
-    await _dbHelper.deleteRestaurante(id);
-    await loadAllData(); // Cascading delete affects plates
+    try {
+      await _dbHelper.deleteRestaurante(id);
+      await loadAllData();
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   // CRUD Prato
   Future<void> addPrato(Prato prato) async {
-    await _dbHelper.insertPrato(prato);
-    await loadAllData(); // New plate might change restaurant metrics
+    try {
+      await _dbHelper.insertPrato(prato);
+      await loadAllData();
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   Future<void> deletePrato(int id) async {
-    await _dbHelper.deletePrato(id);
-    await loadAllData(); // Removing plate might change restaurant metrics
+    try {
+      await _dbHelper.deletePrato(id);
+      await loadAllData();
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   Future<void> deleteMultiplePratos(Set<int> ids) async {

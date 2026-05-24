@@ -1,118 +1,65 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/restaurante.dart';
 import '../models/prato.dart';
 
 class DatabaseHelper {
-  // Construtor Singleton para garantir uma única instância do banco de dados
+  // Construtor Singleton
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
-  static Database? _database;
-
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
-  }
-
-  Future<Database> _initDatabase() async {
-    final path = join(await getDatabasesPath(), 'garfadas_log.db');
-    return await openDatabase(
-      path,
-      version: 1,
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
-      onCreate: _onCreate,
-    );
-  }
-
-  // Criação das tabelas
-  Future<void> _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE restaurantes(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        tipo TEXT NOT NULL,
-        overrideVoltaria INTEGER
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE pratos(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        restauranteId INTEGER NOT NULL,
-        descricaoPrato TEXT NOT NULL,
-        data TEXT NOT NULL,
-        notaComida REAL NOT NULL,
-        notaCustoBeneficio REAL NOT NULL,
-        voltaria INTEGER NOT NULL,
-        observacoes TEXT,
-        imagePath TEXT,
-        FOREIGN KEY (restauranteId) REFERENCES restaurantes (id) ON DELETE CASCADE
-      )
-    ''');
-  }
+  final _client = Supabase.instance.client;
 
   // --- MÉTODOS PARA RESTAURANTES ---
 
   Future<int> insertRestaurante(Restaurante r) async {
-    final db = await database;
-    return await db.insert('restaurantes', r.toMap());
+    final map = r.toMap();
+    map.remove('id');
+    final response = await _client.from('restaurantes').insert(map).select('id').single();
+    return response['id'] as int;
   }
 
   Future<List<Restaurante>> getAllRestaurantes() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('restaurantes');
+    // Busca restaurantes e seus pratos associados para poder calcular as métricas no app
+    final List<dynamic> maps = await _client.from('restaurantes').select('*, pratos(*)');
 
     List<Restaurante> restaurantes = [];
     for (var map in maps) {
-      Restaurante rest = Restaurante.fromMap(map);
-      await _carregarMetricasRestaurante(db, rest);
+      Restaurante rest = Restaurante.fromMap(map as Map<String, dynamic>);
+      _carregarMetricasRestaurante(map, rest);
       restaurantes.add(rest);
     }
     return restaurantes;
   }
 
-  Future<List<Restaurante>> getRestaurantesByClassificacao(
-    bool voltaria,
-  ) async {
+  Future<List<Restaurante>> getRestaurantesByClassificacao(bool voltaria) async {
     List<Restaurante> tds = await getAllRestaurantes();
     return tds.where((r) => r.voltaria == voltaria).toList();
   }
 
-  Future<void> _carregarMetricasRestaurante(
-    Database db,
-    Restaurante rest,
-  ) async {
-    var result = await db.rawQuery(
-      '''
-      SELECT 
-        COUNT(id) as totalPratos, 
-        AVG((notaComida * 0.6) + (notaCustoBeneficio * 0.4)) as mediaGeral
-      FROM pratos 
-      WHERE restauranteId = ?
-    ''',
-      [rest.id],
-    );
-
-    if (result.isNotEmpty && result.first['totalPratos'] != 0) {
-      rest.totalPratos = result.first['totalPratos'] as int;
-      rest.notaGeral = result.first['mediaGeral'] as double;
+  void _carregarMetricasRestaurante(Map<String, dynamic> map, Restaurante rest) {
+    List<dynamic> pratosMap = map['pratos'] ?? [];
+    
+    if (pratosMap.isNotEmpty) {
+      rest.totalPratos = pratosMap.length;
       
-      // Busca o nome do último prato
-      var lastPlateResult = await db.query(
-        'pratos',
-        columns: ['descricaoPrato'],
-        where: 'restauranteId = ?',
-        whereArgs: [rest.id],
-        orderBy: 'id DESC',
-        limit: 1,
-      );
-      if (lastPlateResult.isNotEmpty) {
-        rest.ultimoPrato = lastPlateResult.first['descricaoPrato'] as String;
+      double somaAvaliacao = 0;
+      // Encontrar o prato mais recente
+      Map<String, dynamic>? ultimoPrato;
+
+      for (var pMap in pratosMap) {
+        final prato = Prato.fromMap(pMap as Map<String, dynamic>);
+        somaAvaliacao += prato.mediaAvaliacao;
+        
+        if (ultimoPrato == null || (pMap['id'] as int) > (ultimoPrato['id'] as int)) {
+          ultimoPrato = pMap;
+        }
+      }
+
+      rest.notaGeral = somaAvaliacao / rest.totalPratos;
+      
+      if (ultimoPrato != null) {
+        rest.ultimoPrato = ultimoPrato['descricaoPrato'] as String;
       }
 
       if (rest.overrideVoltaria != null) {
@@ -129,59 +76,46 @@ class DatabaseHelper {
   }
 
   Future<int> updateRestaurante(Restaurante r) async {
-    final db = await database;
-    return await db.update(
-      'restaurantes',
-      r.toMap(),
-      where: 'id = ?',
-      whereArgs: [r.id],
-    );
+    final map = r.toMap();
+    map.remove('id');
+    await _client.from('restaurantes').update(map).eq('id', r.id!);
+    return 1;
   }
 
   Future<int> deleteRestaurante(int id) async {
-    final db = await database;
-    return await db.delete('restaurantes', where: 'id = ?', whereArgs: [id]);
+    await _client.from('restaurantes').delete().eq('id', id);
+    return 1;
   }
 
   // --- MÉTODOS PARA PRATOS ---
 
   Future<int> insertPrato(Prato p) async {
-    final db = await database;
-    return await db.insert('pratos', p.toMap());
+    final map = p.toMap();
+    map.remove('id'); // Remove null id on insert
+    final response = await _client.from('pratos').insert(map).select('id').single();
+    return response['id'] as int;
   }
 
   Future<List<Prato>> getAllPratosComRestaurante() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT p.*, r.nome as nomeLocal 
-      FROM pratos p
-      INNER JOIN restaurantes r ON p.restauranteId = r.id
-    ''');
-    return List.generate(maps.length, (i) => Prato.fromMap(maps[i]));
+    // Usando inner join para trazer o nome do restaurante
+    final List<dynamic> maps = await _client.from('pratos').select('*, restaurantes(nome)');
+    return List.generate(maps.length, (i) => Prato.fromMap(maps[i] as Map<String, dynamic>));
   }
 
   Future<List<Prato>> getPratosByRestaurante(int restauranteId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'pratos',
-      where: 'restauranteId = ?',
-      whereArgs: [restauranteId],
-    );
-    return List.generate(maps.length, (i) => Prato.fromMap(maps[i]));
+    final List<dynamic> maps = await _client.from('pratos').select().eq('restauranteId', restauranteId);
+    return List.generate(maps.length, (i) => Prato.fromMap(maps[i] as Map<String, dynamic>));
   }
 
   Future<int> updatePrato(Prato p) async {
-    final db = await database;
-    return await db.update(
-      'pratos',
-      p.toMap(),
-      where: 'id = ?',
-      whereArgs: [p.id],
-    );
+    final map = p.toMap();
+    map.remove('id');
+    await _client.from('pratos').update(map).eq('id', p.id!);
+    return 1;
   }
 
   Future<int> deletePrato(int id) async {
-    final db = await database;
-    return await db.delete('pratos', where: 'id = ?', whereArgs: [id]);
+    await _client.from('pratos').delete().eq('id', id);
+    return 1;
   }
 }

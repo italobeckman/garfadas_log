@@ -11,6 +11,7 @@ class CustomInput extends StatelessWidget {
   final TextInputType? keyboardType;
   final FocusNode? focusNode;
   final void Function(String)? onFieldSubmitted;
+  final bool isPassword;
 
   const CustomInput({
     super.key,
@@ -22,6 +23,7 @@ class CustomInput extends StatelessWidget {
     this.keyboardType,
     this.focusNode,
     this.onFieldSubmitted,
+    this.isPassword = false,
   });
 
   @override
@@ -32,6 +34,9 @@ class CustomInput extends StatelessWidget {
       onFieldSubmitted: onFieldSubmitted,
       maxLines: maxLines,
       keyboardType: keyboardType,
+      obscureText: isPassword,
+      enableSuggestions: !isPassword,
+      autocorrect: !isPassword,
       style: const TextStyle(color: AppColors.textPrimary),
       decoration: InputDecoration(
         labelText: label,

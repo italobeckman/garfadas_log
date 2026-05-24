@@ -26,7 +26,7 @@ class Restaurante {
       'id': id,
       'nome': nome,
       'tipo': tipo,
-      'overrideVoltaria': overrideVoltaria == null ? null : (overrideVoltaria! ? 1 : 0),
+      'overrideVoltaria': overrideVoltaria,
     };
   }
 
@@ -35,7 +35,7 @@ class Restaurante {
       id: map['id'],
       nome: map['nome'],
       tipo: map['tipo'],
-      overrideVoltaria: map['overrideVoltaria'] == null ? null : map['overrideVoltaria'] == 1,
+      overrideVoltaria: map['overrideVoltaria'] == null ? null : (map['overrideVoltaria'] is bool ? map['overrideVoltaria'] : map['overrideVoltaria'] == 1),
     );
   }
 }

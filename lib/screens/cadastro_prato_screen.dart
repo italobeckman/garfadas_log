@@ -13,6 +13,7 @@ import '../widgets/primary_button.dart';
 import '../widgets/app_colors.dart';
 import '../widgets/app_layout.dart';
 import '../widgets/app_text.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastroPratoScreen extends StatefulWidget {
   final int restauranteId;
@@ -36,6 +37,7 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
   
   File? _image;
   final _picker = ImagePicker();
+  bool _isSaving = false;
 
   void _atualizarVoltaria() {
     if (!_manualOverrideVoltaria) {
@@ -55,45 +57,76 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
     }
   }
 
-  Future<String?> _saveImageLocally(File image) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-    final savedImage = await image.copy(p.join(directory.path, fileName));
-    return savedImage.path;
+  Future<String?> _uploadImageToSupabase(File image) async {
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
+      final imageBytes = await image.readAsBytes();
+      
+      await Supabase.instance.client.storage
+          .from('pratos_images')
+          .uploadBinary(fileName, imageBytes);
+
+      final String publicUrl = Supabase.instance.client.storage
+          .from('pratos_images')
+          .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Erro no upload: $e');
+      return null;
+    }
   }
 
   Future<void> _salvarPrato() async {
     if (_formKey.currentState!.validate()) {
-      String? imagePath;
-      if (_image != null) {
-        imagePath = await _saveImageLocally(_image!);
-      }
+      setState(() => _isSaving = true);
+      
+      try {
+        String? imagePath;
+        if (_image != null) {
+          imagePath = await _uploadImageToSupabase(_image!);
+          if (imagePath == null) {
+            throw Exception("Falha ao fazer upload da imagem.");
+          }
+        }
 
-      final prato = Prato(
-        restauranteId: widget.restauranteId,
-        descricaoPrato: _descricaoPratoController.text.trim(),
-        data: DateFormat('dd/MM/yyyy').format(DateTime.now()),
-        notaComida: _notaComida,
-        notaCustoBeneficio: _notaCustoBeneficio,
-        voltaria: _voltaria,
-        observacoes: _observacoesController.text.trim().isNotEmpty
-            ? _observacoesController.text.trim()
-            : null,
-        imagePath: imagePath,
-      );
-
-      final provider = context.read<AppProvider>();
-      await provider.addPrato(prato);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: AppText('Avaliação salva com sucesso!', color: Colors.white),
-            backgroundColor: AppColors.success,
-            duration: Duration(seconds: 2),
-          ),
+        final prato = Prato(
+          restauranteId: widget.restauranteId,
+          descricaoPrato: _descricaoPratoController.text.trim(),
+          data: DateFormat('dd/MM/yyyy').format(DateTime.now()),
+          notaComida: _notaComida,
+          notaCustoBeneficio: _notaCustoBeneficio,
+          voltaria: _voltaria,
+          observacoes: _observacoesController.text.trim().isNotEmpty
+              ? _observacoesController.text.trim()
+              : null,
+          imagePath: imagePath,
         );
-        Navigator.pop(context);
+
+        final provider = context.read<AppProvider>();
+        await provider.addPrato(prato);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: AppText('Avaliação salva com sucesso!', color: Colors.white),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: AppText('Erro ao salvar: ${e.toString()}', color: Colors.white),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -192,6 +225,7 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
                   label: 'Salvar Avaliação',
                   icon: Icons.save,
                   onPressed: _salvarPrato,
+                  isLoading: _isSaving,
                 ),
               ),
             ],

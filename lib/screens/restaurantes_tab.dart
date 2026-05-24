@@ -8,6 +8,7 @@ import '../widgets/app_colors.dart';
 import '../widgets/app_text.dart';
 import 'cadastro_restaurante_screen.dart';
 import 'restaurante_detail_screen.dart';
+import '../services/auth_service.dart';
 
 class RestaurantesTab extends StatefulWidget {
   const RestaurantesTab({super.key});
@@ -51,7 +52,15 @@ class _RestaurantesTabState extends State<RestaurantesTab> {
             icon: Icon(_getFilterIcon(), color: AppColors.primary),
             tooltip: _getFilterTooltip(),
             onPressed: _cycleFilter,
-          )
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppColors.danger),
+            tooltip: 'Sair da conta',
+            onPressed: () async {
+              await AuthService().signOut();
+              // O AuthGate lidará com o redirecionamento automaticamente.
+            },
+          ),
         ],
       ),
       body: Consumer<AppProvider>(
