@@ -2,8 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/prato.dart';
@@ -13,7 +11,6 @@ import '../widgets/primary_button.dart';
 import '../widgets/app_colors.dart';
 import '../widgets/app_layout.dart';
 import '../widgets/app_text.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastroPratoScreen extends StatefulWidget {
   final int restauranteId;
@@ -57,34 +54,15 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
     }
   }
 
-  Future<String?> _uploadImageToSupabase(File image) async {
-    try {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-      final imageBytes = await image.readAsBytes();
-      
-      await Supabase.instance.client.storage
-          .from('pratos_images')
-          .uploadBinary(fileName, imageBytes);
-
-      final String publicUrl = Supabase.instance.client.storage
-          .from('pratos_images')
-          .getPublicUrl(fileName);
-
-      return publicUrl;
-    } catch (e) {
-      debugPrint('Erro no upload: $e');
-      return null;
-    }
-  }
-
   Future<void> _salvarPrato() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isSaving = true);
       
       try {
+        final provider = context.read<AppProvider>();
         String? imagePath;
         if (_image != null) {
-          imagePath = await _uploadImageToSupabase(_image!);
+          imagePath = await provider.uploadPratoImage(_image!);
           if (imagePath == null) {
             throw Exception("Falha ao fazer upload da imagem.");
           }
@@ -103,7 +81,6 @@ class _CadastroPratoScreenState extends State<CadastroPratoScreen> {
           imagePath: imagePath,
         );
 
-        final provider = context.read<AppProvider>();
         await provider.addPrato(prato);
 
         if (mounted) {

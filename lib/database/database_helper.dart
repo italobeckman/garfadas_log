@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/restaurante.dart';
 import '../models/prato.dart';
@@ -19,60 +20,16 @@ class DatabaseHelper {
     return response['id'] as int;
   }
 
+
+
   Future<List<Restaurante>> getAllRestaurantes() async {
-    // Busca restaurantes e seus pratos associados para poder calcular as métricas no app
+    final List<dynamic> maps = await _client.from('restaurantes').select();
+    return maps.map((map) => Restaurante.fromMap(map as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getRawRestaurantesComPratos() async {
     final List<dynamic> maps = await _client.from('restaurantes').select('*, pratos(*)');
-
-    List<Restaurante> restaurantes = [];
-    for (var map in maps) {
-      Restaurante rest = Restaurante.fromMap(map as Map<String, dynamic>);
-      _carregarMetricasRestaurante(map, rest);
-      restaurantes.add(rest);
-    }
-    return restaurantes;
-  }
-
-  Future<List<Restaurante>> getRestaurantesByClassificacao(bool voltaria) async {
-    List<Restaurante> tds = await getAllRestaurantes();
-    return tds.where((r) => r.voltaria == voltaria).toList();
-  }
-
-  void _carregarMetricasRestaurante(Map<String, dynamic> map, Restaurante rest) {
-    List<dynamic> pratosMap = map['pratos'] ?? [];
-    
-    if (pratosMap.isNotEmpty) {
-      rest.totalPratos = pratosMap.length;
-      
-      double somaAvaliacao = 0;
-      // Encontrar o prato mais recente
-      Map<String, dynamic>? ultimoPrato;
-
-      for (var pMap in pratosMap) {
-        final prato = Prato.fromMap(pMap as Map<String, dynamic>);
-        somaAvaliacao += prato.mediaAvaliacao;
-        
-        if (ultimoPrato == null || (pMap['id'] as int) > (ultimoPrato['id'] as int)) {
-          ultimoPrato = pMap;
-        }
-      }
-
-      rest.notaGeral = somaAvaliacao / rest.totalPratos;
-      
-      if (ultimoPrato != null) {
-        rest.ultimoPrato = ultimoPrato['descricaoPrato'] as String;
-      }
-
-      if (rest.overrideVoltaria != null) {
-        rest.voltaria = rest.overrideVoltaria;
-      } else {
-        rest.voltaria = rest.notaGeral! >= 3.5;
-      }
-    } else {
-      rest.totalPratos = 0;
-      rest.notaGeral = null;
-      rest.voltaria = rest.overrideVoltaria;
-      rest.ultimoPrato = null;
-    }
+    return List<Map<String, dynamic>>.from(maps);
   }
 
   Future<int> updateRestaurante(Restaurante r) async {
@@ -117,5 +74,10 @@ class DatabaseHelper {
   Future<int> deletePrato(int id) async {
     await _client.from('pratos').delete().eq('id', id);
     return 1;
+  }
+
+  Future<String> uploadPratoImage(String fileName, Uint8List imageBytes) async {
+    await _client.storage.from('pratos_images').uploadBinary(fileName, imageBytes);
+    return _client.storage.from('pratos_images').getPublicUrl(fileName);
   }
 }

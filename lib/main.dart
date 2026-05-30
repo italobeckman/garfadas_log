@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/app_provider.dart';
 import 'screens/auth/auth_gate.dart';
 import 'widgets/app_colors.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'database/database_helper.dart';
+import 'services/restaurante_service.dart';
+import 'services/prato_service.dart';
+import 'services/pdf_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,9 +34,25 @@ void main() async {
     );
   }
 
+  final dbHelper = DatabaseHelper();
+  final restauranteService = RestauranteService(dbHelper);
+  final pratoService = PratoService(dbHelper);
+  final pdfService = PdfService();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => AppProvider()..loadAllData(),
+    MultiProvider(
+      providers: [
+        Provider<DatabaseHelper>.value(value: dbHelper),
+        Provider<RestauranteService>.value(value: restauranteService),
+        Provider<PratoService>.value(value: pratoService),
+        Provider<PdfService>.value(value: pdfService),
+        ChangeNotifierProvider(
+          create: (context) => AppProvider(
+            restauranteService: restauranteService,
+            pratoService: pratoService,
+          )..loadAllData(),
+        ),
+      ],
       child: const GarfadaLogApp(),
     ),
   );
